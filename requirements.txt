@@ -1,0 +1,9 @@
+pandas
+openpyxl
+pyspark
+databricks-connect==15.4.*
+databricks-sdk
+azure-identity
+azure-storage-file-datalake
+streamlit==1.38.0
+databricks-connect
