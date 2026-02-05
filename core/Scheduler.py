@@ -5,10 +5,23 @@ import requests
 from pathlib import Path
 from typing import Any, Dict
 
+os.environ.pop("DATABRICKS_CLIENT_ID", None)
+os.environ.pop("DATABRICKS_CLIENT_SECRET", None)
+
+secrets = {}
+paths = [
+    Path(os.getcwd()).parent / "secrets" / "secrets.toml",
+    Path(os.getcwd()) / "secrets" / "secrets.toml"
+]
+for path in paths:
+    if path.exists():
+        secrets = toml.load(path)
+        break
+
 class ApiHandler:
 
-    host = os.getenv("DATABRICKS_HOST")
-    token = os.getenv("DATABRICKS_TOKEN")
+    host = os.getenv("DATABRICKS_HOST", secrets.get("databricks", {}).get("host"))
+    token = os.getenv("DATABRICKS_TOKEN", secrets.get("databricks", {}).get("token"))
     cluster_name = "dbs-cls-data-engineering"
 
     def __init__(self, name:str) -> None:
@@ -40,8 +53,8 @@ class ApiHandler:
     def json_payload(self, sharepoint_url:str, db_table:str, mode:str, **kwargs) -> Dict[str, Any]:
     
         # Resolve path
-        notebook_path ="/Workspace/Users/tailan.rg@cpflenergia.onmicrosoft.com/Apps/sharepoint-app/notebooks/ingest"
-        # notebook_path = #Path(os.getcwd()).parent/"notebooks"/"ingest"
+        # notebook_path ="/Workspace/Users/tailan.rg@cpflenergia.onmicrosoft.com/Apps/sharepoint-app/notebooks/ingest"
+        notebook_path = Path(os.getcwd()).parent/"notebooks"/"ingest"
 
         # Cluster ID
         cluster_id = self.cluster_id()

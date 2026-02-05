@@ -36,7 +36,17 @@ set_custom_ccs()
 engine = acquire_spark_component()
 
 # Create control table
-engine.create_control_table()
+try:
+    engine.create_control_table()
+except:
+    from core.RemoteSpark import remote_session, SparkComponent
+    @st.cache_resource()
+    def acquire_spark_component():
+        spark = remote_session()
+        return SparkComponent(spark)
+    engine = acquire_spark_component()
+    engine.create_control_table()
+
 
 def full_name() -> Tuple[str, str, str]:
     col1, col2, col3 = st.columns(3)
@@ -49,8 +59,6 @@ def full_name() -> Tuple[str, str, str]:
     with col3:
         table = st.text_input("Tabela", key="table",)
     return catalog, schema, table
-
-
 
 class CronSyntax:
 
@@ -198,7 +206,7 @@ with col_display:
             m2.metric("Colunas", st.session_state.df_preview.shape[1])
             if st.button("Confirmar", type="secondary", use_container_width=True):
                 data = {
-                    "inserted_by": engine.username(),
+                    "inserted_by": st.context.headers.get("X-Forwarded-Preferred-Username", "Usuario de teste"),
                     "db_catalog": st.session_state.catalog,
                     "db_schema": st.session_state.schema,
                     "db_table": st.session_state.table,

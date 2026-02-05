@@ -15,9 +15,20 @@ cluster_id = "0223-180802-ufyybjgl"
 os.environ.pop("DATABRICKS_CLIENT_ID", None)
 os.environ.pop("DATABRICKS_CLIENT_SECRET", None)
 
+secrets = {}
+paths = [
+    Path(os.getcwd()).parent / "secrets" / "secrets.toml",
+    Path(os.getcwd()) / "secrets" / "secrets.toml"
+]
+for path in paths:
+    if path.exists():
+        secrets = toml.load(path)
+        break
+
 def remote_session():
-    host = os.getenv("DATABRICKS_HOST")
-    token = os.getenv("DATABRICKS_TOKEN")
+
+    host = os.getenv("DATABRICKS_HOST", secrets.get("databricks", {}).get("host"))
+    token = os.getenv("DATABRICKS_TOKEN", secrets.get("databricks", {}).get("token"))
     if token:
         return DatabricksSession.builder.remote(
             host=host,

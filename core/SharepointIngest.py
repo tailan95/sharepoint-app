@@ -23,11 +23,20 @@ from databricks.sdk import WorkspaceClient
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import col
 
+secrets = {}
+paths = [
+    Path(os.getcwd()).parent / "secrets" / "secrets.toml",
+    Path(os.getcwd()) / "secrets" / "secrets.toml"
+]
+for path in paths:
+    if path.exists():
+        secrets = toml.load(path)
+        break
 
 class SharepointIngest:
     
-    _host = os.getenv("DATABRICKS_HOST")
-    _token = os.getenv("DATABRICKS_TOKEN")
+    _host = os.environ.get("DATABRICKS_HOST", secrets.get("databricks", {}).get("host"))
+    _token = os.environ.get("DATABRICKS_TOKEN", secrets.get("databricks", {}).get("token"))
 
     def __init__(self) -> None:
 
@@ -38,10 +47,9 @@ class SharepointIngest:
         )
 
         # Retrieve secrets
-        scope = "adb-secret-scope"
-        self.tenant_id = os.getenv("SHAREPOINT_TENANT_ID")
-        self.client_id = os.getenv("SHAREPOINT_CLIENT_ID")
-        self.client_secret = os.getenv("SHAREPOINT_CLIENT_SECRET")
+        self.tenant_id = os.environ.get("SHAREPOINT_TENANT_ID", secrets.get("sharepoint", {}).get("tenant_id"))
+        self.client_id = os.environ.get("SHAREPOINT_CLIENT_ID", secrets.get("sharepoint", {}).get("client_id"))
+        self.client_secret = os.environ.get("SHAREPOINT_CLIENT_SECRET", secrets.get("sharepoint", {}).get("client_secret"))
 
         # Credential
         self.credential = ClientSecretCredential(
