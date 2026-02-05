@@ -36,12 +36,12 @@ def get_schedule_config() -> Union[str, str, str]:
             frequency = st.selectbox("Frequência de Ingestão", ["DAILY", "WEEKLY", "MONTHLY"], disabled=is_disabled)
         with col_detalhes:
             if frequency == "WEEKLY":
-                schedule_day = st.selectbox("Dia da semana", ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"], disabled=is_disabled)
+                schedule_day = st.selectbox("Dia da semana", ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"], disabled=is_disabled)
             elif frequency == "MONTHLY":
                 schedule_day_of_month = st.number_input("Dia do mês", 1, 31, 1, disabled=is_disabled)
             schedule_time_obj = st.time_input("Hora de execução", value=time(12, 0), disabled=is_disabled)
             schedule_hour = schedule_time_obj.strftime('%H:%M')
-    return schedule_day, schedule_hour, schedule_day_of_month
+    return schedule, frequency, schedule_day, schedule_hour, schedule_day_of_month
 
 def get_file_params(file):
     sheet_name = None

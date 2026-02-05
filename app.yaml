@@ -1,5 +1,17 @@
-command: [
-  "streamlit", 
-  "run",
-  "app.py"
-]
+command: 
+  - "streamlit"
+  - "run"
+  - "app.py"
+
+env:
+  - name: "DATABRICKS_TOKEN"
+    valueFrom: "DATABRICKS_TOKEN"
+
+  - name: "SHAREPOINT_TENANT_ID"
+    valueFrom: "SHAREPOINT_TENANT_ID"
+
+  - name: "SHAREPOINT_CLIENT_ID"
+    valueFrom: "SHAREPOINT_CLIENT_ID"
+
+  - name: "SHAREPOINT_CLIENT_SECRET"
+    valueFrom: "SHAREPOINT_CLIENT_SECRET"

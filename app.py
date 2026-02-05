@@ -3,6 +3,7 @@ import time
 import json
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from typing import Tuple
 
 # Streamlit
 import streamlit as st
@@ -11,22 +12,84 @@ import streamlit as st
 from ui.widgets import *
 from ui.layout import set_custom_ccs
 
+from core.RemoteSpark import remote_session, SparkComponent
 from core.SharepointIngest import SharepointIngest
-from core.Standardizer import Standardizer
+from core.ProcessDF import ProcessDF
+from core.Scheduler import ApiHandler
 
 # Configuração da Página
-st.set_page_config(page_title="SharePoint Ingest", layout="wide")
+st.set_page_config(
+    page_title="Sistema de Ingestão - Sharepoint", 
+    page_icon="https://upload.wikimedia.org/wikipedia/commons/thumb/f/fc/Logo_CPFL_Energia.svg/960px-Logo_CPFL_Energia.svg.png",
+    layout="wide")
 
-from core.SparkSession import *
+# Configure Remote spark
+@st.cache_resource()
+def acquire_spark_component():
+    spark = remote_session()
+    return SparkComponent(spark)
 
-# CSS Avançado para Forçar o Layout
+# CSS
 set_custom_ccs()
 
-# Initialize spark session
-spark = get_spark_session()
+# Start spark engine
+engine = acquire_spark_component()
 
 # Create control table
-create_control_table(spark)
+engine.create_control_table()
+
+def full_name() -> Tuple[str, str, str]:
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        list_catalogs = engine.get_catalogs()
+        catalog = st.selectbox("Catalog", list_catalogs, key="catalog")
+    with col2:
+        list_schemas = engine.get_schemas(catalog)
+        schema = st.selectbox("Schema", list_schemas, key="schema")
+    with col3:
+        table = st.text_input("Tabela", key="table",)
+    return catalog, schema, table
+
+
+
+class CronSyntax:
+
+    @staticmethod
+    def daily(hour: str) -> str:
+        hour, minutes = hour.split(":")
+        hour = int(hour)
+        minutes = int(minutes)
+        if not (0 <= hour <= 23 and 0 <= minutes <= 59):
+            raise ValueError("Horário inválido")
+        return f"0 {minutes} {hour} * * ?"
+    
+    @staticmethod
+    def weekly(day:str, hour:str) -> str:
+        week_days = dict(zip(
+            ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"],
+            ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        ))
+        hour, minutes = hour.split(":")
+        hour = int(hour)
+        minutes = int(minutes)
+        if not (0 <= hour <= 23 and 0 <= minutes <= 59):
+            raise ValueError("Horário inválido")
+        week_day = week_days.get(day)[:3]
+        return f"0 {minutes} {hour} ? * {week_day}"
+    
+    @staticmethod
+    def monthly(day:str, hour:str) -> str:
+        hour, minutes = hour.split(":")
+        hour = int(hour)
+        minutes = int(minutes)
+        if not (0 <= hour <= 23 and 0 <= minutes <= 59):
+            raise ValueError("Horário inválido")
+        if not (1 <= day <= 31):
+            raise ValueError("Dia inválido")
+        return f"0 {minutes} {hour} {day} * ?"
+
+
+
 
 # Sidebar
 if "page_selection" not in st.session_state:
@@ -45,7 +108,7 @@ with st.sidebar:
     st.markdown("<br><br><br><br><br>", unsafe_allow_html=True)
     st.markdown("---")
     st.info("Aplicação destinada a ingestão de dados no Data Lake.")
-    st.caption("Desenvolvido por\nEISA BigDatal\n")
+    st.caption("Desenvolvido por\nEISA BigData\n")
 ingestion_type = st.session_state.page_selection
 
 # Layout Principal
@@ -54,6 +117,10 @@ if "df_preview" not in st.session_state:
     st.session_state.df_preview = None
 if "transient_path" not in st.session_state:
     st.session_state.transient_path = None
+if "cron_syntax" not in st.session_state:
+    st.session_state.cron_syntax = None
+if "schedule" not in st.session_state:
+    st.session_state.schedule = None
 col_input, col_display = st.columns([1, 2], gap="large")
 with col_input:
     if ingestion_type == "Upload Manual":
@@ -63,7 +130,7 @@ with col_input:
             st.markdown("### Enviar Arquivo")       
             file = st.file_uploader("", type=["xlsx", "csv", "parquet"], label_visibility="collapsed")
             catalog, schema, table = "", "", ""
-            catalog, schema, table = get_full_name(spark)
+            catalog, schema, table = full_name()
             sheet_name = get_file_params(file)
             write_mode = get_write_mode()
             st.session_state.transient_path = None
@@ -74,7 +141,7 @@ with col_input:
                     st.session_state.sheet_name = sheet_name
                     with st.spinner("Processando arquivo..."):
                         df_preview = read_dragged_file(file, sheet_name)
-                        df_preview = Standardizer().execute(df_preview)
+                        df_preview = ProcessDF().execute(df_preview)
                         st.session_state.df_preview = df_preview
                 else:
                     if file is None:
@@ -88,20 +155,28 @@ with col_input:
             st.markdown("### Enviar Arquivo")     
             sharepoint_url = st.text_input("Link do arquivo no SharePoint", placeholder="https://cpflenergia.sharepoint.com/...")
             catalog, schema, table = "", "", ""
-            catalog, schema, table = get_full_name(spark)
+            catalog, schema, table = full_name()
             write_mode = get_write_mode()
-            schedule_day, schedule_hour, schedule_day_of_month = get_schedule_config()
+            st.session_state.schedule, frequency, schedule_day, schedule_hour, schedule_day_of_month = get_schedule_config()
+            syntax = CronSyntax()
+            if frequency == "DAILY":
+                st.session_state.cron_syntax = syntax.daily(hour=schedule_hour)
+            elif frequency == "WEEKLY":
+                st.session_state.cron_syntax = syntax.weekly(day=schedule_day, hour=schedule_hour)
+            elif frequency == "MONTHLY":
+                st.session_state.cron_syntax = syntax.monthly(day=schedule_day_of_month, hour=schedule_hour)
+
             if st.button("Carregar", type="secondary", use_container_width=True):
                 if "" not in [sharepoint_url, catalog, schema, table]:
-                    engine = SharepointIngest()
-                    df_preview = engine.execute(sharepoint_url)
-                    df_preview = Standardizer().execute(df_preview)
+                    sharepoint = SharepointIngest()
+                    df_preview = sharepoint.execute(sharepoint_url)
+                    df_preview = ProcessDF().execute(df_preview)
                     st.session_state.df_preview = df_preview
-                    st.session_state.transient_path = engine.folder_path
-                    st.session_state.file_name = engine.folder_path.split('.')[-2].lower()
-                    st.session_state.file_format = engine.folder_path.split('.')[-1].lower()
+                    st.session_state.transient_path = sharepoint.filepath
+                    st.session_state.file_name = sharepoint.filepath.split('.')[-2].lower()
+                    st.session_state.file_format = sharepoint.filepath.split('.')[-1].lower()
                     st.session_state.sheet_name = None
-                else:               
+                else:
                     if sharepoint_url == "":
                         st.warning("Selecione um arquivo.")
                     elif "" in [catalog, schema, table]:
@@ -113,8 +188,8 @@ with col_input:
         st.info("Tabela de controle e logs serão exibidos aqui.")
 with col_display:
     with st.container(border=False):
-        st.subheader("Preview e Validação")
-        if (st.session_state.df_preview is not None) and (catalog is not "") and (schema is not "") and (table is not ""):
+        if (st.session_state.df_preview is not None) and ("" not in [catalog, schema, table]):
+            st.subheader("Preview e Validação")
             st.markdown(f"**Tabela Destino:** `{st.session_state.catalog}.{st.session_state.schema}.{st.session_state.table}`")
             st.markdown(f"**Modo:** `{write_mode.upper()}`")
             st.dataframe(st.session_state.df_preview, use_container_width=True, height=400)
@@ -123,7 +198,7 @@ with col_display:
             m2.metric("Colunas", st.session_state.df_preview.shape[1])
             if st.button("Confirmar", type="secondary", use_container_width=True):
                 data = {
-                    "inserted_by": get_user_from_spark(spark),
+                    "inserted_by": engine.username(),
                     "db_catalog": st.session_state.catalog,
                     "db_schema": st.session_state.schema,
                     "db_table": st.session_state.table,
@@ -144,14 +219,26 @@ with col_display:
                 mode = True if write_mode == "overwrite" else False
                 if ingestion_type  in ["Upload Manual", "SharePoint"]:
                     full_table_name = f"{st.session_state.catalog}.{st.session_state.schema}.{st.session_state.table}"
-                    success, message = save_table(spark, st.session_state.df_preview, full_table_name, mode)
+                    success, message = engine.save_table(st.session_state.df_preview, full_table_name, mode)
                 if success:
-                    spark.sql(f"""
+                    engine.spark.sql(f"""
                         INSERT INTO hive_uc.default.controle_processamento_sharepoint_app
                         ({dict_keys})
                         VALUES ({dict_values})
                     """)
-                    # st.toast(f"Dados salvos no Unity Catalog!")
                     st.success("Carga realizada com sucesso!")
+                    if st.session_state.schedule and ingestion_type=="SharePoint":
+                        db_table = f"{st.session_state.catalog}.{st.session_state.schema}.{st.session_state.table}"
+                        scheduler = ApiHandler(name = db_table)
+                        job_success, msg = scheduler.create_job(
+                            sharepoint_url=sharepoint_url, 
+                            db_table=db_table, 
+                            mode=write_mode, 
+                            quartz_cron_expression=st.session_state.cron_syntax
+                        )
+                        if job_success:
+                            st.warning(msg)
+                        else:
+                            st.error(msg)
                 else:
                     st.error(f"Erro ao salvar dados: {message}")   

@@ -4,7 +4,7 @@ import pandas as pd
 import unicodedata
 from collections import defaultdict
 
-class Standardizer:
+class ProcessDF:
     
     @staticmethod
     def rename_columns(dataframe: pd.DataFrame) -> pd.DataFrame:
@@ -25,7 +25,7 @@ class Standardizer:
         return dataframe
     
     @staticmethod
-    def set_empty_columns(dataframe: pd.DataFrame) -> pd.DataFrame:
+    def empty_columns(dataframe: pd.DataFrame) -> pd.DataFrame:
         for col in dataframe.columns:
             if dataframe[col].dtype == object:
                 dataframe[col] = dataframe[col].astype(str).str.strip()
@@ -37,7 +37,7 @@ class Standardizer:
     
     def execute(self, dataframe:pd.DataFrame) -> pd.DataFrame:
         dataframe = self.rename_columns(dataframe)
-        dataframe = self.set_empty_columns(dataframe)
+        dataframe = self.empty_columns(dataframe)
         dataframe = self.drop_empty_columns(dataframe)
         return dataframe
     
