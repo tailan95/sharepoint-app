@@ -100,6 +100,16 @@ class SparkComponent:
 if __name__=="__main__":
 
     spark = remote_session()
+
+    @st.cache_resource(ttl=3600)
+    def get_spark_session():
+        spark = remote_session()
+        try:
+            spark.sql("SELECT 1").collect()
+        except Exception:
+            spark = remote_session()
+        return spark
+
     engine = SparkComponent(spark)
 
     

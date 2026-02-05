@@ -30,7 +30,7 @@ class ApiHandler:
         self.name = name.replace(" ","_")
 
     def cluster_id(self) -> str:
-        url = f"{self.host}/api/2.0/clusters/list"
+        url = f"https://{self.host}/api/2.0/clusters/list"
         headers = {"Authorization": f"Bearer {self.token}"}
         response = requests.get(url, headers=headers)
         clusters = response.json()
@@ -40,7 +40,7 @@ class ApiHandler:
         return ""
     
     def job_id(self) -> str:
-        url = f"{self.host}/api/2.2/jobs/list"
+        url = f"https://{self.host}/api/2.2/jobs/list"
         headers = {"Authorization": f"Bearer {self.token}"}
         response = requests.get(url, headers=headers)
         jobs = response.json().get("jobs", [])
@@ -54,7 +54,7 @@ class ApiHandler:
     
         # Resolve path
         # notebook_path ="/Workspace/Users/tailan.rg@cpflenergia.onmicrosoft.com/Apps/sharepoint-app/notebooks/ingest"
-        notebook_path = Path(os.getcwd()).parent/"notebooks"/"ingest"
+        notebook_path = str(Path(os.getcwd()).parent/"notebooks"/"ingest")
 
         # Cluster ID
         cluster_id = self.cluster_id()
@@ -75,7 +75,7 @@ class ApiHandler:
         payload.update(dict(max_concurrent_runs=1))
 
         # Set task
-        payload.update(dict(
+        tasks = dict(
                 task_key = db_table,
                 notebook_task = dict(
                     notebook_path = notebook_path,
@@ -90,17 +90,19 @@ class ApiHandler:
                 max_retries = kwargs.get("task_retries", 3),
                 min_retry_interval_millis = kwargs.get("min_retry_interval_millis", int(300*1e3)),
                 retry_on_timeout = kwargs.get("retry_on_timeout", True)
-            ))
+            )
+        payload.update(dict(task=[tasks])
+            )
         
         # Insert tags
         payload.update(
-            tags = {"SharePoint APP": ""}
+            tags = {"SharePointAPP": ""}
         )
 
         return payload
     
     def create_job(self, sharepoint_url:str, db_table:str, mode:str, **kwargs) -> str:
-        url = f"{self.host}/api/2.2/jobs/"
+        url = f"https://{self.host}/api/2.2/jobs/"
         headers = {"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"}
         job_id = self.job_id()
         if job_id is not None:
@@ -115,7 +117,7 @@ class ApiHandler:
         response.raise_for_status()
         if response.status_code == 200:
             job_id = self.job_id()
-            return True, f"Job criado/atualizado: {self.host}jobs/{job_id}"
+            return True, f"Job criado/atualizado: https://{self.host}/jobs/{job_id}"
         else:
             return False, f"Problema ao criar/atualizar o job: {response.text}"
 
